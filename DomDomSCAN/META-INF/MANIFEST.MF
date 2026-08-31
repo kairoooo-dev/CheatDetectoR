@@ -1,0 +1,6 @@
+Manifest-Version: 1.0
+Premain-Class: net.java.f
+Can-Retransform-Classes: true
+Main-Class: net.java.n
+SplashScreen-Image: l.png
+

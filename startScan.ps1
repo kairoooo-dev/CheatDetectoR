@@ -96,6 +96,81 @@ function Test-FileForCheats {
     return $results
 }
 
+# Function to scan inside JAR files for cheat code
+function Scan-JarFile {
+    param([string]$JarPath)
+    
+    $results = @()
+    $tempDir = Join-Path $env:TEMP "cheat-scan-$(Get-Random)"
+    
+    try {
+        # Create temp directory
+        New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+        
+        # Extract jar (it's a zip)
+        Expand-Archive -Path $JarPath -DestinationPath $tempDir -Force -ErrorAction SilentlyContinue
+        
+        if ($?) {
+            # Scan all class files and text files inside
+            $jarFiles = Get-ChildItem -Path $tempDir -Recurse -File -ErrorAction SilentlyContinue
+            
+            foreach ($file in $jarFiles) {
+                $relativePath = $file.FullName.Replace($tempDir, "").TrimStart("\", "/")
+                
+                # Check class file names and paths
+                if ($file.Extension -eq ".class") {
+                    $classPath = $relativePath.Replace("\", "/").Replace(".class", "")
+                    
+                    foreach ($client in $db.cheatClients) {
+                        foreach ($pattern in $client.patterns) {
+                            if ($classPath -like "*$($pattern.ToLower())*" -or 
+                                $classPath -like "*hack*" -or
+                                $classPath -like "*cheat*" -or
+                                $classPath -like "*exploit*") {
+                                $results += [PSCustomObject]@{
+                                    File = $JarPath
+                                    Client = $client.Name
+                                    Severity = $client.Severity
+                                    Match = "JAR Class: $relativePath"
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                # Check text/config files for cheat signatures
+                if ($file.Extension -in @(".json", ".cfg", ".txt", ".properties", ".yml", ".yaml")) {
+                    try {
+                        $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
+                        if ($content) {
+                            foreach ($client in $db.cheatClients) {
+                                foreach ($pattern in $client.patterns) {
+                                    if ($content -match "(?i)$($pattern)") {
+                                        $results += [PSCustomObject]@{
+                                            File = $JarPath
+                                            Client = $client.Name
+                                            Severity = $client.Severity
+                                            Match = "JAR Content: $relativePath"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } catch {}
+                }
+            }
+        }
+    } catch {}
+    finally {
+        # Cleanup temp directory
+        if (Test-Path $tempDir) {
+            Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    
+    return $results
+}
+
 # Scan each minecraft location
 foreach ($mcPath in $minecraftPaths) {
     if (Test-Path $mcPath) {
@@ -152,9 +227,41 @@ if ($DeepScan) {
                     Write-Host "    Scanning: $current / $totalFiles" -ForegroundColor DarkGray
                 }
                 
+                # Check filename first
                 $result = Test-FileForCheats -FilePath $file.FullName
                 if ($result) {
                     $findings += $result
+                }
+                
+                # If it's a JAR file, scan inside it
+                if ($file.Extension -eq ".jar") {
+                    Write-Host "    [JAR] Scanning inside: $($file.Name)" -ForegroundColor DarkCyan
+                    $jarResults = Scan-JarFile -JarPath $file.FullName
+                    if ($jarResults) {
+                        $findings += $jarResults
+                    }
+                }
+            }
+        }
+    }
+    
+    # Also scan all JARs found in minecraft paths
+    Write-Host ""
+    Write-Host "[*] Scanning all JAR files in Minecraft directories..." -ForegroundColor Yellow
+    
+    foreach ($mcPath in $minecraftPaths) {
+        if (Test-Path $mcPath) {
+            $jarFiles = Get-ChildItem -Path $mcPath -Recurse -File -Filter "*.jar" -ErrorAction SilentlyContinue
+            $totalJars = $jarFiles.Count
+            $currentJar = 0
+            
+            foreach ($jar in $jarFiles) {
+                $currentJar++
+                Write-Host "    [JAR] [$currentJar/$totalJars] $($jar.Name)" -ForegroundColor DarkCyan
+                
+                $jarResults = Scan-JarFile -JarPath $jar.FullName
+                if ($jarResults) {
+                    $findings += $jarResults
                 }
             }
         }
