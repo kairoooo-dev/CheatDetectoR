@@ -1,6 +1,6 @@
 {
   "cheatClients": [
-    { "name": "AstraClient", "patterns": ["astra", "astraa"], "severity": "high" },
+    { "name": "AstraClient", "patterns": ["astraa", "astraclient"], "severity": "high" },
     { "name": "CruxClient", "patterns": ["crux"], "severity": "high" },
     { "name": "FrostClient", "patterns": ["frostclient"], "severity": "high" },
     { "name": "FakeClient", "patterns": ["fakeclient", "fake-client"], "severity": "high" },
@@ -47,7 +47,6 @@
     { "name": "WhiteCat", "patterns": ["whitecat", "white-cat"], "severity": "high" },
     { "name": "Zephyr", "patterns": ["zephyr"], "severity": "high" },
     { "name": "Delta", "patterns": ["delta-client"], "severity": "high" },
-    { "name": "Godmode", "patterns": ["godmode"], "severity": "high" },
     { "name": "Expensive", "patterns": ["expensive"], "severity": "high" },
     { "name": "Flux", "patterns": ["flux-client"], "severity": "high" },
     { "name": "Novoline", "patterns": ["novoline"], "severity": "high" },
@@ -58,16 +57,16 @@
     { "name": "ZeroDay", "patterns": ["zeroday"], "severity": "high" }
   ],
   "cheatJarSignatures": [
-    "astra", "astraa", "crux", "frostclient", "fakeclient", "cyemer",
+    "astraclient", "astraa", "crux", "frostclient", "fakeclient", "cyemer",
     "foxaddition", "dawn-standalone", "dawnloader", "wurst", "meteor",
     "doomsday", "krypton", "argon", "liquidbounce", "bleachhack",
     "nightx", "aristois", "dortware", "mercenaries", "flareon",
     "tenacity", "gambler", "xulu", "aristotle", "exhibition",
     "rise-client", "sigma-client", "vape", "raven", "konas",
     "phobos", "inertia", "impact-client", "future-client", "naven",
-    "oxygen-client", "spartan", "ares", "eclipse", "insanity",
+    "oxygen-client", "spartan", "ares", "insanity",
     "osiris", "phantom", "ronin", "skillclient", "trident",
-    "whitecat", "zephyr", "delta", "godmode", "expensive",
+    "whitecat", "zephyr", "delta", "expensive",
     "flux", "novoline", "pandora", "kami", "lullaby", "nodus", "zeroday"
   ],
   "cheatClassPatterns": [
