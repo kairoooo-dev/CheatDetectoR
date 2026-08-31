@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Minecraft Cheat Detector v5.0
+    Minecraft Cheat Detector v6.0
 .DESCRIPTION
     Detects known cheat clients by scanning filenames, JAR contents, and class paths.
 .EXAMPLE
@@ -20,7 +20,7 @@ Add-Type -AssemblyName System.IO.Compression
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "    Minecraft Cheat Detector v5.0" -ForegroundColor Cyan
+Write-Host "    Minecraft Cheat Detector v6.0" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -45,26 +45,46 @@ function Scan-JarContents {
     if ($scannedJars.ContainsKey($JarPath)) { return }
     $scannedJars[$JarPath] = $true
 
+    $jarFileName = [System.IO.Path]::GetFileNameWithoutExtension($JarPath).ToLower()
+
+    foreach ($sig in $db.cheatJarSignatures) {
+        if ($jarFileName -like "*$($sig.ToLower())*") {
+            Add-Finding -File $JarPath -Client $sig -Severity "high" -Match "JAR filename: $([System.IO.Path]::GetFileName($JarPath))"
+            return
+        }
+    }
+
     $stream = $null
     $archive = $null
     try {
         $stream = [System.IO.File]::OpenRead($JarPath)
         $archive = New-Object System.IO.Compression.ZipArchive($stream, [System.IO.Compression.ZipArchiveMode]::Read)
 
+        $foundCheat = $false
+
         foreach ($entry in $archive.Entries) {
             $name = $entry.FullName
             $nameLower = $name.ToLower()
 
-            if ($nameLower -match "^net/minecraft/" -or $nameLower -match "^org/apache/") { continue }
+            if ($nameLower -match "^net/minecraft/") { continue }
+            if ($nameLower -match "^assets/minecraft/") { continue }
+            if ($nameLower -match "^data/minecraft/") { continue }
+            if ($nameLower -match "^org/apache/") { continue }
+            if ($nameLower -match "^com/google/") { continue }
+            if ($nameLower -match "^META-INF/") { continue }
 
             foreach ($client in $db.cheatClients) {
                 foreach ($pattern in $client.patterns) {
                     $p = $pattern.ToLower()
-                    if ($nameLower -match [regex]::Escape($p)) {
-                        Add-Finding -File $JarPath -Client $client.Name -Severity $client.Severity -Match "JAR: $name"
+                    if ($nameLower -match "/$([regex]::Escape($p))" -or $nameLower -match "^$([regex]::Escape($p))") {
+                        Add-Finding -File $JarPath -Client $client.Name -Severity $client.Severity -Match "JAR entry: $name"
+                        $foundCheat = $true
+                        break
                     }
                 }
+                if ($foundCheat) { break }
             }
+            if ($foundCheat) { break }
 
             if ($entry.Extension -eq ".class") {
                 $className = [System.IO.Path]::GetFileNameWithoutExtension($name).ToLower()
@@ -75,9 +95,12 @@ function Scan-JarContents {
                 foreach ($cp in $db.cheatClassPatterns) {
                     $cl = $cp.ToLower()
                     if ($className -like "*$cl*") {
-                        Add-Finding -File $JarPath -Client "Cheat module" -Severity "high" -Match "Class: $name"
+                        Add-Finding -File $JarPath -Client "Cheat module" -Severity "high" -Match "JAR class: $name"
+                        $foundCheat = $true
+                        break
                     }
                 }
+                if ($foundCheat) { break }
             }
         }
     } catch {}
@@ -97,15 +120,15 @@ function Scan-File {
     foreach ($client in $db.cheatClients) {
         foreach ($pattern in $client.patterns) {
             $p = $pattern.ToLower()
-            if ($fileName -like "*$p*" -or $fullLower -like "*\$p*" -or $fullLower -like "*\ $p *") {
-                Add-Finding -File $FilePath -Client $client.Name -Severity $client.Severity -Match "Path: $FilePath"
+            if ($fileName -like "*$p*") {
+                Add-Finding -File $FilePath -Client $client.Name -Severity $client.Severity -Match "Filename: $([System.IO.Path]::GetFileName($FilePath))"
                 return
             }
         }
     }
 
     foreach ($sp in $db.suspiciousPaths) {
-        if ($fullLower -like "*\$sp\*" -or $fullLower -like "*\$sp.*") {
+        if ($fullLower -match "[\\/]$([regex]::Escape($sp))[\\/]") {
             Add-Finding -File $FilePath -Client "Suspicious folder" -Severity "medium" -Match "Path: $FilePath"
             return
         }
@@ -147,10 +170,7 @@ $startTime = Get-Date
 
 $mcPaths = @(
     "$env:USERPROFILE\.minecraft",
-    "$env:APPDATA\.minecraft",
-    "$env:USERPROFILE\.minecraft\versions",
-    "$env:USERPROFILE\.minecraft\mods",
-    "$env:USERPROFILE\.minecraft\libraries"
+    "$env:APPDATA\.minecraft"
 )
 
 foreach ($p in $mcPaths) {
@@ -159,18 +179,11 @@ foreach ($p in $mcPaths) {
 
 if ($DeepScan) {
     Write-Host ""
-    Write-Host "[*] Deep scan enabled - scanning all drives..." -ForegroundColor Yellow
+    Write-Host "[*] Deep scan..." -ForegroundColor Yellow
 
     Scan-Directory -Path "$env:USERPROFILE\Downloads" -Label "Downloads"
     Scan-Directory -Path "$env:USERPROFILE\Desktop" -Label "Desktop"
     Scan-Directory -Path "$env:USERPROFILE\Documents" -Label "Documents"
-
-    $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Used -gt 0 } | Select-Object -ExpandProperty Root
-    foreach ($drive in $drives) {
-        if ($drive -ne "C:\") {
-            Scan-Directory -Path $drive -Label "Drive $drive"
-        }
-    }
 }
 
 $duration = (Get-Date) - $startTime
