@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Minecraft Cheat Detector v3.0
+    Minecraft Cheat Detector v4.0
 .EXAMPLE
     .\startScan.ps1
     .\startScan.ps1 -DeepScan
@@ -18,7 +18,7 @@ Add-Type -AssemblyName System.IO.Compression
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "    Minecraft Cheat Detector v3.0" -ForegroundColor Cyan
+Write-Host "    Minecraft Cheat Detector v4.0" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -37,6 +37,51 @@ function Add-Finding {
     Write-Host "    [!] $Client ($Severity): $Match" -ForegroundColor Red
 }
 
+$skipPackages = @(
+    "net/minecraft/",
+    "org/apache/",
+    "com/google/",
+    "org/jetbrains/",
+    "javax/",
+    "java/",
+    "org/spongepowered/",
+    "org/eclipse/",
+    "org/bukkit/",
+    "com/mojang/",
+    "org/slf4j/",
+    "com/fasterxml/",
+    "io/netty/",
+    "org/yaml/",
+    "org/json/",
+    "com/velocitypowered/",
+    "net/md_5/",
+    "org/nightconfig/",
+    "com/electronwill/",
+    "com/typesafe/",
+    "org/davidmoten/",
+    "org/inarautomotive/",
+    "com/sirsnaryo/",
+    "com/earth2me/",
+    "ac/grim/",
+    "org/jd/",
+    "com/github/retrooper/",
+    "net/techboy/",
+    "dev/sixseven/",
+    "assets/dawn-loader/"
+)
+
+$cheatClasses = @(
+    "killaura", "autoclicker", "velocity", "freecam", "jesus", "nuker",
+    "aimassist", "fastplace", "noslow", "cheststealer", "nofall",
+    "antiknockback", "fastbreak", "blink", "esp", "tracers", "fullbright",
+    "bhop", "noclip", "phase", "crash", "disabler", "hitboxes", "aura",
+    "enderman", "antivoid", "instantkill", "autotool", "autoeat",
+    "elytrafly", "scaffold", "bridge", "bowaim", "aimbot", "xray",
+    "killAura", "autoClicker", "noFall", "noSlow", "chestStealer",
+    "autoSprint", "autoJump", "step", "speed", "fly", "flight",
+    "reach", "hitBox", "autoArmor", "autoTotem", "autoEat"
+)
+
 function Scan-JarContents {
     param([string]$JarPath)
 
@@ -53,18 +98,37 @@ function Scan-JarContents {
             $name = $entry.FullName
             $nameLower = $name.ToLower()
 
-            foreach ($sig in $db.cheatJarSignatures) {
-                if ($nameLower -match "/$([regex]::Escape($sig))" -or $nameLower -match "^$([regex]::Escape($sig))") {
-                    Add-Finding -File $JarPath -Client $sig -Severity "high" -Match "Inside JAR: $name"
+            $skip = $false
+            foreach ($sp in $skipPackages) {
+                if ($nameLower -match "^$([regex]::Escape($sp))") { $skip = $true; break }
+            }
+            if ($skip) { continue }
+
+            if ($entry.Extension -eq ".class") {
+                $className = [System.IO.Path]::GetFileNameWithoutExtension($name).ToLower()
+                $dirPath = $name.ToLower() -replace "/[^/]+$", ""
+
+                foreach ($cp in $cheatClasses) {
+                    $cl = $cp.ToLower()
+                    if ($className -eq $cl -or $className -like "*$cl*" ) {
+                        if ($dirPath -notmatch "^net/minecraft" -and $dirPath -notmatch "^org/apache" -and $dirPath -notmatch "^com/google") {
+                            Add-Finding -File $JarPath -Client "Cheat class" -Severity "high" -Match "JAR class: $name"
+                        }
+                    }
                 }
             }
 
-            if ($entry.Extension -eq ".class") {
-                $classPath = $nameLower -replace "\.class$", ""
-                foreach ($cp in $db.cheatClassPatterns) {
-                    $escaped = [regex]::Escape($cp)
-                    if ($classPath -match "/$escaped/" -or $classPath -match "\.$escaped\." -or $classPath -match "/$escaped\.class$") {
-                        Add-Finding -File $JarPath -Client "Cheat class" -Severity "high" -Match "JAR class: $name"
+            foreach ($client in $db.cheatClients) {
+                foreach ($pattern in $client.patterns) {
+                    $p = $pattern.ToLower()
+                    if ($nameLower -match "/$([regex]::Escape($p))" -or $nameLower -match "^$([regex]::Escape($p))") {
+                        $skipClient = $false
+                        foreach ($sp in $skipPackages) {
+                            if ($nameLower -match "^$([regex]::Escape($sp))") { $skipClient = $true; break }
+                        }
+                        if (-not $skipClient) {
+                            Add-Finding -File $JarPath -Client $client.Name -Severity $client.Severity -Match "JAR: $name"
+                        }
                     }
                 }
             }
@@ -114,7 +178,7 @@ function Scan-Directory {
 
     foreach ($file in $files) {
         $i++
-        if ($i % 1000 -eq 0) {
+        if ($i % 2000 -eq 0) {
             Write-Host "    [$i / $total]" -ForegroundColor DarkGray
         }
         Scan-File -FilePath $file.FullName
