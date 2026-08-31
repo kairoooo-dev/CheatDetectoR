@@ -219,14 +219,18 @@ if ($DeepScan) {
 $duration = (Get-Date) - $startTime
 
 Write-Host ""
-Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "    SCAN COMPLETE" -ForegroundColor Cyan
-Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "    Time: $($duration.TotalSeconds.ToString('F1'))s" -ForegroundColor White
 
 if ($findings.Count -eq 0) {
-    Write-Host "    CLEAN - No cheats detected!" -ForegroundColor Green
+    Write-Host "============================================" -ForegroundColor Green
+    Write-Host "            Scan  Finished" -ForegroundColor Green
+    Write-Host "      Congrats you are clean gng w Guy" -ForegroundColor Green
+    Write-Host "============================================" -ForegroundColor Green
 } else {
+    Write-Host "============================================" -ForegroundColor Red
+    Write-Host "            Scan  Finished" -ForegroundColor Red
+    Write-Host "          You Are  Cheating" -ForegroundColor Red
+    Write-Host "============================================" -ForegroundColor Red
+    Write-Host ""
     Write-Host "    FOUND $($findings.Count) CHEAT(S):" -ForegroundColor Red
     Write-Host ""
     $grouped = $findings | Group-Object -Property Client
@@ -238,6 +242,9 @@ if ($findings.Count -eq 0) {
         }
     }
 }
+
+Write-Host ""
+Write-Host "    Time: $($duration.TotalSeconds.ToString('F1'))s" -ForegroundColor White
 
 if ($ExportReport -and $findings.Count -gt 0) {
     $reportFile = Join-Path $scriptPath ("scan-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".json")
