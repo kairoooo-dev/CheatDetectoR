@@ -315,7 +315,7 @@ if ($findings.Count -eq 0) {
 
 # Export report if requested
 if ($ExportReport -and $findings.Count -gt 0) {
-    $reportPath = Join-Path $scriptPath "cheat-scan-report-$(Get-Date -Format 'yyyyMMdd-HHmmss).json"
+    $reportPath = Join-Path $scriptPath "cheat-scan-report-$(Get-Date -Format 'yyyyMMdd-HHmmss').json"
     $findings | ConvertTo-Json -Depth 5 | Out-File -FilePath $reportPath -Encoding UTF8
     Write-Host "[*] Report saved to: $reportPath" -ForegroundColor Green
 }
