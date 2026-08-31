@@ -145,13 +145,17 @@ function Scan-File {
 }
 
 function Scan-Directory {
-    param([string]$Path, [string]$Label)
+    param([string]$Path, [string]$Label, [switch]$JarOnly)
 
     if (-not (Test-Path $Path)) { return }
 
     Write-Host "[+] $Label : $Path" -ForegroundColor Green
 
-    $files = Get-ChildItem -Path $Path -Recurse -File -ErrorAction SilentlyContinue
+    if ($JarOnly) {
+        $files = Get-ChildItem -Path $Path -Recurse -File -Filter "*.jar" -ErrorAction SilentlyContinue
+    } else {
+        $files = Get-ChildItem -Path $Path -Recurse -File -ErrorAction SilentlyContinue
+    }
     $total = $files.Count
     $i = 0
 
@@ -170,12 +174,38 @@ $startTime = Get-Date
 
 $mcPaths = @(
     "$env:USERPROFILE\.minecraft",
-    "$env:APPDATA\.minecraft"
+    "$env:APPDATA\.minecraft",
+    "$env:LOCALAPPDATA\Modrinth App",
+    "$env:APPDATA\Modrinth",
+    "$env:LOCALAPPDATA\CurseForge",
+    "$env:LOCALAPPDATA\GDLauncher",
+    "$env:LOCALAPPDATA\PolyMC",
+    "$env:LOCALAPPDATA\PrismLauncher",
+    "$env:LOCALAPPDATA\MultiMC",
+    "$env:LOCALAPPDATA\ATLauncher",
+    "$env:APPDATA\ATLauncher",
+    "$env:LOCALAPPDATA\Babylon",
+    "$env:LOCALAPPDATA\Badlion Client",
+    "$env:LOCALAPPDATA\Lunar Client",
+    "$env:LOCALAPPDATA\Feather",
+    "$env:LOCALAPPDATA\Flarial",
+    "$env:LOCALAPPDATA\SKlauncher",
+    "$env:LOCALAPPDATA\SK-Genesis",
+    "$env:LOCALAPPDATA\Astralith",
+    "$env:LOCALAPPDATA\Legacy Launcher",
+    "$env:LOCALAPPDATA\Crystal Launcher",
+    "$env:LOCALAPPDATA\LabyMod",
+    "$env:APPDATA\.babric",
+    "$env:APPDATA\.versionmanager",
+    "$env:USERPROFILE\SKlauncher",
+    "$env:USERPROFILE\Astralith"
 )
 
 foreach ($p in $mcPaths) {
-    Scan-Directory -Path $p -Label "Minecraft"
+    Scan-Directory -Path $p -Label "Minecraft" -JarOnly
 }
+
+Scan-Directory -Path "$env:USERPROFILE\Downloads" -Label "Downloads" -JarOnly
 
 if ($DeepScan) {
     Write-Host ""
