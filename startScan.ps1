@@ -1,6 +1,8 @@
 <#
 .SYNOPSIS
-    Minecraft Cheat Detector v4.0
+    Minecraft Cheat Detector v5.0
+.DESCRIPTION
+    Detects known cheat clients by scanning filenames, JAR contents, and class paths.
 .EXAMPLE
     .\startScan.ps1
     .\startScan.ps1 -DeepScan
@@ -18,7 +20,7 @@ Add-Type -AssemblyName System.IO.Compression
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "    Minecraft Cheat Detector v4.0" -ForegroundColor Cyan
+Write-Host "    Minecraft Cheat Detector v5.0" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -34,53 +36,8 @@ function Add-Finding {
         if ($f.File -eq $File -and $f.Client -eq $Client -and $f.Match -eq $Match) { return }
     }
     $findings.Add([PSCustomObject]@{ File=$File; Client=$Client; Severity=$Severity; Match=$Match })
-    Write-Host "    [!] $Client ($Severity): $Match" -ForegroundColor Red
+    Write-Host "    [!] FOUND: $Client ($Severity) - $Match" -ForegroundColor Red
 }
-
-$skipPackages = @(
-    "net/minecraft/",
-    "org/apache/",
-    "com/google/",
-    "org/jetbrains/",
-    "javax/",
-    "java/",
-    "org/spongepowered/",
-    "org/eclipse/",
-    "org/bukkit/",
-    "com/mojang/",
-    "org/slf4j/",
-    "com/fasterxml/",
-    "io/netty/",
-    "org/yaml/",
-    "org/json/",
-    "com/velocitypowered/",
-    "net/md_5/",
-    "org/nightconfig/",
-    "com/electronwill/",
-    "com/typesafe/",
-    "org/davidmoten/",
-    "org/inarautomotive/",
-    "com/sirsnaryo/",
-    "com/earth2me/",
-    "ac/grim/",
-    "org/jd/",
-    "com/github/retrooper/",
-    "net/techboy/",
-    "dev/sixseven/",
-    "assets/dawn-loader/"
-)
-
-$cheatClasses = @(
-    "killaura", "autoclicker", "velocity", "freecam", "jesus", "nuker",
-    "aimassist", "fastplace", "noslow", "cheststealer", "nofall",
-    "antiknockback", "fastbreak", "blink", "esp", "tracers", "fullbright",
-    "bhop", "noclip", "phase", "crash", "disabler", "hitboxes", "aura",
-    "enderman", "antivoid", "instantkill", "autotool", "autoeat",
-    "elytrafly", "scaffold", "bridge", "bowaim", "aimbot", "xray",
-    "killAura", "autoClicker", "noFall", "noSlow", "chestStealer",
-    "autoSprint", "autoJump", "step", "speed", "fly", "flight",
-    "reach", "hitBox", "autoArmor", "autoTotem", "autoEat"
-)
 
 function Scan-JarContents {
     param([string]$JarPath)
@@ -98,37 +55,27 @@ function Scan-JarContents {
             $name = $entry.FullName
             $nameLower = $name.ToLower()
 
-            $skip = $false
-            foreach ($sp in $skipPackages) {
-                if ($nameLower -match "^$([regex]::Escape($sp))") { $skip = $true; break }
-            }
-            if ($skip) { continue }
-
-            if ($entry.Extension -eq ".class") {
-                $className = [System.IO.Path]::GetFileNameWithoutExtension($name).ToLower()
-                $dirPath = $name.ToLower() -replace "/[^/]+$", ""
-
-                foreach ($cp in $cheatClasses) {
-                    $cl = $cp.ToLower()
-                    if ($className -eq $cl -or $className -like "*$cl*" ) {
-                        if ($dirPath -notmatch "^net/minecraft" -and $dirPath -notmatch "^org/apache" -and $dirPath -notmatch "^com/google") {
-                            Add-Finding -File $JarPath -Client "Cheat class" -Severity "high" -Match "JAR class: $name"
-                        }
-                    }
-                }
-            }
+            if ($nameLower -match "^net/minecraft/" -or $nameLower -match "^org/apache/") { continue }
 
             foreach ($client in $db.cheatClients) {
                 foreach ($pattern in $client.patterns) {
                     $p = $pattern.ToLower()
-                    if ($nameLower -match "/$([regex]::Escape($p))" -or $nameLower -match "^$([regex]::Escape($p))") {
-                        $skipClient = $false
-                        foreach ($sp in $skipPackages) {
-                            if ($nameLower -match "^$([regex]::Escape($sp))") { $skipClient = $true; break }
-                        }
-                        if (-not $skipClient) {
-                            Add-Finding -File $JarPath -Client $client.Name -Severity $client.Severity -Match "JAR: $name"
-                        }
+                    if ($nameLower -match [regex]::Escape($p)) {
+                        Add-Finding -File $JarPath -Client $client.Name -Severity $client.Severity -Match "JAR: $name"
+                    }
+                }
+            }
+
+            if ($entry.Extension -eq ".class") {
+                $className = [System.IO.Path]::GetFileNameWithoutExtension($name).ToLower()
+                $dirPath = ($name -replace "/[^/]+$", "").ToLower()
+
+                if ($dirPath -match "^net/minecraft") { continue }
+
+                foreach ($cp in $db.cheatClassPatterns) {
+                    $cl = $cp.ToLower()
+                    if ($className -like "*$cl*") {
+                        Add-Finding -File $JarPath -Client "Cheat module" -Severity "high" -Match "Class: $name"
                     }
                 }
             }
@@ -144,20 +91,29 @@ function Scan-File {
     param([string]$FilePath)
 
     $fileName = [System.IO.Path]::GetFileNameWithoutExtension($FilePath).ToLower()
+    $fullLower = $FilePath.ToLower()
     $ext = [System.IO.Path]::GetExtension($FilePath).ToLower()
 
     foreach ($client in $db.cheatClients) {
         foreach ($pattern in $client.patterns) {
             $p = $pattern.ToLower()
-            if ($fileName -eq $p -or $fileName -eq "$p-mod" -or $fileName -eq "$p-client") {
-                Add-Finding -File $FilePath -Client $client.Name -Severity $client.Severity -Match "Filename: $([System.IO.Path]::GetFileName($FilePath))"
+            if ($fileName -like "*$p*" -or $fullLower -like "*\$p*" -or $fullLower -like "*\ $p *") {
+                Add-Finding -File $FilePath -Client $client.Name -Severity $client.Severity -Match "Path: $FilePath"
                 return
             }
         }
     }
 
+    foreach ($sp in $db.suspiciousPaths) {
+        if ($fullLower -like "*\$sp\*" -or $fullLower -like "*\$sp.*") {
+            Add-Finding -File $FilePath -Client "Suspicious folder" -Severity "medium" -Match "Path: $FilePath"
+            return
+        }
+    }
+
     if ($ext -in $db.cheatExtensions) {
-        Add-Finding -File $FilePath -Client "Suspicious extension" -Severity "medium" -Match "Extension: $ext"
+        Add-Finding -File $FilePath -Client "Suspicious extension" -Severity "high" -Match "Extension: $ext"
+        return
     }
 
     if ($ext -eq ".jar") {
@@ -189,15 +145,32 @@ function Scan-Directory {
 
 $startTime = Get-Date
 
-Scan-Directory -Path "$env:USERPROFILE\.minecraft" -Label "Minecraft"
-Scan-Directory -Path "$env:APPDATA\.minecraft" -Label "Minecraft (Roaming)"
+$mcPaths = @(
+    "$env:USERPROFILE\.minecraft",
+    "$env:APPDATA\.minecraft",
+    "$env:USERPROFILE\.minecraft\versions",
+    "$env:USERPROFILE\.minecraft\mods",
+    "$env:USERPROFILE\.minecraft\libraries"
+)
+
+foreach ($p in $mcPaths) {
+    Scan-Directory -Path $p -Label "Minecraft"
+}
 
 if ($DeepScan) {
     Write-Host ""
-    Write-Host "[*] Deep scan..." -ForegroundColor Yellow
+    Write-Host "[*] Deep scan enabled - scanning all drives..." -ForegroundColor Yellow
+
     Scan-Directory -Path "$env:USERPROFILE\Downloads" -Label "Downloads"
     Scan-Directory -Path "$env:USERPROFILE\Desktop" -Label "Desktop"
     Scan-Directory -Path "$env:USERPROFILE\Documents" -Label "Documents"
+
+    $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Used -gt 0 } | Select-Object -ExpandProperty Root
+    foreach ($drive in $drives) {
+        if ($drive -ne "C:\") {
+            Scan-Directory -Path $drive -Label "Drive $drive"
+        }
+    }
 }
 
 $duration = (Get-Date) - $startTime
@@ -216,7 +189,7 @@ if ($findings.Count -eq 0) {
     $grouped = $findings | Group-Object -Property Client
     foreach ($g in $grouped) {
         Write-Host "  [$($g.Count)x] $($g.Name)" -ForegroundColor Magenta
-        foreach ($f in ($g.Group | Select-Object -First 3)) {
+        foreach ($f in ($g.Group | Select-Object -First 5)) {
             Write-Host "       $($f.File)" -ForegroundColor Gray
             Write-Host "       -> $($f.Match)" -ForegroundColor DarkGray
         }
