@@ -1,0 +1,10 @@
+# Windows
+Thumbs.db
+Desktop.ini
+
+# PowerShell
+*.log
+
+# IDE
+.vscode/
+.idea/
