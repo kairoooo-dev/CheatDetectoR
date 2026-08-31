@@ -45,41 +45,100 @@ function Scan-JarContents {
         $stream = [System.IO.File]::OpenRead($JarPath)
         $archive = New-Object System.IO.Compression.ZipArchive($stream, [System.IO.Compression.ZipArchiveMode]::Read)
 
+        $cheatPatterns = @(
+            "hack", "cheat", "exploit", "killaura", "xray", "autoclicker",
+            "velocity", "freecam", "jesus", "nuker", "aimassist", "fastplace",
+            "noslow", "cheststealer", "nofall", "antiknockback", "fastbreak",
+            "blink", "esp", "tracers", "fullbright", "bhop", "sprint",
+            "flight", "fly", "noclip", "speed", "slow", "phase",
+            "crash", "disabler", "timer", "reach", "hitboxes",
+            "aura", "enderman", "antivoid", "target", "targetselector",
+            "instantkill", "autotool", "autoeat", "totem", "elytrafly",
+            "step", "scaffold", "bridge", "bowaim", "aimbot"
+        )
+
+        $skipPaths = @(
+            "assets/minecraft/textures/",
+            "assets/minecraft/models/",
+            "assets/minecraft/sounds/",
+            "assets/minecraft/lang/",
+            "assets/minecraft/particles/",
+            "assets/minecraft/shaders/",
+            "data/minecraft/loot_table/",
+            "data/minecraft/recipe/",
+            "data/minecraft/advancement/",
+            "META-INF/"
+        )
+
+        $clientNames = $db.cheatClients | ForEach-Object { $_.patterns[0] }
+
         foreach ($entry in $archive.Entries) {
             $entryName = $entry.FullName
 
-            foreach ($client in $db.cheatClients) {
-                foreach ($pattern in $client.patterns) {
-                    if ($entryName -match "(?i)$([regex]::Escape($pattern))") {
-                        Write-Finding -File $JarPath -Client $client.Name -Severity $client.Severity -Match "Inside JAR: $entryName"
+            $skip = $false
+            foreach ($sp in $skipPaths) {
+                if ($entryName -like "$sp*") { $skip = $true; break }
+            }
+            if ($skip) { continue }
+
+            if ($entry.Extension -eq ".class") {
+                $classPath = $entryName -replace "\.class$", ""
+                $classPathLower = $classPath.ToLower()
+
+                foreach ($client in $db.cheatClients) {
+                    foreach ($pattern in $client.patterns) {
+                        $p = $pattern.ToLower()
+                        if ($classPathLower -match "/$p/" -or $classPathLower -match "\.$p\." -or $classPathLower -match "/$p\.class$") {
+                            Write-Finding -File $JarPath -Client $client.Name -Severity $client.Severity -Match "JAR class: $entryName"
+                        }
+                    }
+                }
+
+                foreach ($cp in $cheatPatterns) {
+                    if ($classPathLower -match "/$cp/" -or $classPathLower -match "\.$cp\." -or $classPathLower -match "/$cp\.class$") {
+                        $alreadyFound = $false
+                        foreach ($f in $script:findings) {
+                            if ($f.File -eq $JarPath -and $f.Match -eq "JAR class: $entryName") {
+                                $alreadyFound = $true; break
+                            }
+                        }
+                        if (-not $alreadyFound) {
+                            Write-Finding -File $JarPath -Client "Suspicious class" -Severity "medium" -Match "JAR class: $entryName"
+                        }
                     }
                 }
             }
 
-            if ($entryName -match "(?i)(hack|cheat|exploit|killaura|xray|scaffold|autoclicker|velocity|freecam|jesus|nuker|reach|aimassist|fastplace|noslow|cheststealer|nofall|antiknockback)") {
-                foreach ($client in $db.cheatClients) {
-                    if ($entryName -match "(?i)$([regex]::Escape($client.patterns[0]))") {
-                        break
+            if ($entry.Extension -in @(".json", ".cfg", ".properties") -and $entryName -notlike "data/minecraft/*" -and $entryName -notlike "assets/minecraft/*") {
+                try {
+                    $reader = New-Object System.IO.StreamReader($entry.Open())
+                    $content = $reader.ReadToEnd()
+                    $reader.Close()
+
+                    foreach ($client in $db.cheatClients) {
+                        foreach ($pattern in $client.patterns) {
+                            if ($content -match "(?i)`"$([regex]::Escape($pattern))`"") {
+                                $alreadyFound = $false
+                                foreach ($f in $script:findings) {
+                                    if ($f.File -eq $JarPath -and $f.Client -eq $client.Name) {
+                                        $alreadyFound = $true; break
+                                    }
+                                }
+                                if (-not $alreadyFound) {
+                                    Write-Finding -File $JarPath -Client $client.Name -Severity $client.Severity -Match "JAR config: $entryName"
+                                }
+                            }
+                        }
                     }
-                }
-                $alreadyFound = $false
-                foreach ($f in $script:findings) {
-                    if ($f.File -eq $JarPath -and $f.Match -eq "Inside JAR: $entryName") {
-                        $alreadyFound = $true
-                        break
-                    }
-                }
-                if (-not $alreadyFound) {
-                    Write-Finding -File $JarPath -Client "Suspicious JAR Content" -Severity "medium" -Match "Inside JAR: $entryName"
-                }
+                } catch {}
             }
         }
 
         $archive.Dispose()
         $stream.Close()
     } catch {
-        if ($archive) { $archive.Dispose() }
-        if ($stream) { $stream.Close() }
+        try { if ($archive) { $archive.Dispose() } } catch {}
+        try { if ($stream) { $stream.Close() } } catch {}
     }
 }
 
